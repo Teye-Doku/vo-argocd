@@ -1,0 +1,112 @@
+argo-cd:
+  dex:
+    enabled: false
+  server:
+    extraArgs:
+      - --insecure
+    config:
+      repository.credentials: |
+          - url: ssh://git@192.168.202.250/APPS
+            sshPrivateKeySecret: 
+              name: argocd-repo-creds-ssh-creds
+              key: sshPrivateKey
+      resource.customizations: |
+        networking.k8s.io/Ingress:
+          health.lua: |
+            hs = {}
+            hs.status = "Healthy"
+            return hs        
+  configs:
+    knownHosts:
+      data:
+        # -- Known Hosts
+        # @default -- See [values.yaml]
+        ssh_known_hosts: |
+          192.168.202.250 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDMffb1E0d0t2030GlmosY0PlbD8afwoljBqOwe2I1TJ0fj8mT0nanZYLVEqPhZBFPsDtWGPPyW5tjETjFgNyVzx4kuuyh7UWnbBgpxD0QgFP6E5yUCsw1v9ZrC7y3oEnv1232Fo49dw3EkLobV2rm5tq9mdtFECzPgqeT0lQz9SV1jI4yDy0hEvLVYEDabIAM8FWnMUJ3xaYB4M6vnUrAijQDAUat3ymLN5sazeHi0aGU4qUWC3enlOxpqJUKpz0BW02hZ4ndp4Kd7grKiz4VD8BesnzKLI6TSxg4VHA0tGSss099NJxa0OXnICD8lRhVsHMi8lVMxxOlvHB3J0JFl
+          192.168.202.250 ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBN208TOV2DkTVu0ew9ytcncbitV6C4QAe9fwcC3Q0lyvNor3yTSeR6RrmTJvYI5uU5owERAU+9PDpJ7SCjRLCz4=
+          192.168.202.250 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKarck4MaW506Vkq8XRyoI9WFZikeyL7P8yZnnAgRIs3
+    credentialTemplates:
+      ssh-creds:
+        url: ssh://git@192.168.202.250/APPS/Services/helm/app-sets.git
+        sshPrivateKey: |
+          -----BEGIN OPENSSH PRIVATE KEY-----
+          b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
+          QyNTUxOQAAACCE+23s5kEsgJOEaubKVvDfZPrFo1FGdrm7R3t1zRj6lwAAAKAf4BIcH+AS
+          HAAAAAtzc2gtZWQyNTUxOQAAACCE+23s5kEsgJOEaubKVvDfZPrFo1FGdrm7R3t1zRj6lw
+          AAAEAox3HMSutC2LJlMuJWsFzhC1MM2zT6SK6m9t/Xib3LiYT7bezmQSyAk4Rq5spW8N9k
+          +sWjUUZ2ubtHe3XNGPqXAAAAGGFyZ29jZEB2aWFjY2Vzcy1vcmNhLmNvbQECAwQF
+          -----END OPENSSH PRIVATE KEY-----
+    repositories: 
+      private-git-repo:
+        type: git
+        name: vo-gitlab
+        url: ssh://git@192.168.202.250/APPS/Services/helm/app-sets.git
+  repoServer:
+    volumes:
+      - name: helm
+        emptyDir: {}
+      - name: aws
+        secret:
+          secretName: aws-helm-credentials
+    volumeMounts:
+      - mountPath: /helm
+        name: helm
+    env:
+      - name: HELM_DATA_HOME
+        value: /helm
+      - name: HELM_CACHE_HOME
+        value: /helm/cache
+      - name: HELM_CONFIG_HOME
+        value: /helm/config
+      - name: HELM_PLUGINS
+        value: /helm/plugins/
+      - name: AWS_ACCESS_KEY_ID
+        valueFrom:
+          secretKeyRef:
+            name: aws-helm-credentials
+            key: AWS_ACCESS_KEY_ID
+      - name: AWS_SECRET_ACCESS_KEY
+        valueFrom:
+          secretKeyRef:
+            name: aws-helm-credentials
+            key: AWS_SECRET_ACCESS_KEY
+      - name: AWS_DEFAULT_REGION
+        valueFrom:
+          secretKeyRef:
+            name: aws-helm-credentials
+            key: AWS_DEFAULT_REGION            
+    initContainers:
+      - name: install-helm-plugins
+        image: alpine/helm:3.8.2
+        volumeMounts:
+          - mountPath: /helm
+            name: helm
+        env:
+          - name: HELM_DATA_HOME
+            value: /helm
+          - name: HELM_CACHE_HOME
+            value: /helm/cache
+          - name: HELM_CONFIG_HOME
+            value: /helm/config
+          - name: AWS_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: aws-helm-credentials
+                key: AWS_ACCESS_KEY_ID
+          - name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: aws-helm-credentials
+                key: AWS_SECRET_ACCESS_KEY
+          - name: AWS_DEFAULT_REGION
+            valueFrom:
+              secretKeyRef:
+                name: aws-helm-credentials
+                key: AWS_DEFAULT_REGION
+        command: ["/bin/sh", "-c"]
+        args:
+          - apk --no-cache add curl;
+            apk --no-cache add --upgrade bash;
+            helm plugin install https://github.com/hypnoglow/helm-s3.git ;
+            helm repo add infra s3://chart-helm-repo/infrastructure/;
+            chmod -R 777 $HELM_DATA_HOME;      

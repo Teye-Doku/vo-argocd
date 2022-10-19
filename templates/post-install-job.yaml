@@ -1,0 +1,19 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "post-{{.Release.Name}}"
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  template:
+    metadata:
+      name: "{{.Release.Name}}"
+    spec:
+    #   serviceAccountName: kube-system:tiller
+      restartPolicy: Never
+      containers:
+      - name: k8s
+        image: bitnami/kubectl:1.21
+        imagePullPolicy: IfNotPresent
+        command: ["/bin/sh","-c", "kubectl create job ecr-login --from=cronjob/ecr-login -n {{ .Release.Namespace }}"]

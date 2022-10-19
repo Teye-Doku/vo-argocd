@@ -1,0 +1,39 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ecr-login
+spec:
+  schedule: "0 */8 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: ecr-login
+              image: python:3.7.4-alpine3.10
+              env:
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: aws-helm-credentials
+                      key: AWS_ACCESS_KEY_ID
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: aws-helm-credentials
+                      key: AWS_SECRET_ACCESS_KEY
+                - name: AWS_DEFAULT_REGION
+                  valueFrom:
+                    secretKeyRef:
+                      name: aws-helm-credentials
+                      key: AWS_DEFAULT_REGION
+              envFrom:
+                - secretRef:
+                    name: argocd-initial-admin-secret
+              imagePullPolicy: IfNotPresent
+              command: ["/bin/sh", "-c" ]
+              args:
+                [
+                  "apk add bash openssl curl && pip3 install awscli && curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/download/v2.0.3/argocd-linux-amd64 && chmod +x /usr/local/bin/argocd && argocd login argocd-server:80 --username admin --password $password  --plaintext && ECR_PASSWORD=$(aws ecr get-login-password --region us-east-1) && argocd repo add 432206584898.dkr.ecr.us-east-1.amazonaws.com --type helm --name vo-ecr --enable-oci --upsert --username AWS --password $ECR_PASSWORD && argocd repo list ",
+                ]
+          restartPolicy: OnFailure
